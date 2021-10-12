@@ -1,5 +1,6 @@
 use rosalind::{complement_base, parse_dna, parse_fasta, parse_rna};
 use std::collections::HashMap;
+use std::time::Instant;
 
 ////////////////////////////////////
 
@@ -76,11 +77,93 @@ pub fn prot() {
         print!("{:?}", p);
     }
 }
+
+pub fn grph() {
+    let filename = "data/grph.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta(&string).unwrap();
+    for (i, left) in strands.iter().enumerate() {
+        for (j, right) in strands.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+            if left.strand.data[left.strand.data.len() - 3..] == right.strand.data[..3] {
+                println!("{} {}", left.name, right.name);
+            }
+        }
+    }
+}
+
+pub fn long() {
+    let filename = "data/long.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta(&string).unwrap();
+
+    let superstring = strands.superstring().unwrap();
+    for c in superstring.data {
+        print!("{:?}", c);
+    }
+}
+
+pub fn fib() {
+    let filename = "data/fib.txt";
+    let string = std::fs::read(filename).unwrap();
+    let mut string = String::from_utf8(string).unwrap();
+    string = string.trim().to_string();
+    let tokens = string.split(' ').collect::<Vec<_>>();
+
+    let n: usize = tokens[0].parse().unwrap();
+    let k: usize = tokens[1].parse().unwrap();
+
+    let mut a = 1;
+    let mut b = 1;
+
+    for _ in 0..n - 2 {
+        let c = k * a + b;
+        a = b;
+        b = c;
+    }
+    println!("{:?}", b);
+}
+
+pub fn fib2() {
+    let filename = "data/fibd.txt";
+    let string = std::fs::read(filename).unwrap();
+    let mut string = String::from_utf8(string).unwrap();
+    string = string.trim().to_string();
+    let tokens = string.split(' ').collect::<Vec<_>>();
+
+    let n: u64 = tokens[0].parse().unwrap();
+    let m: usize = tokens[1].parse().unwrap();
+
+    let mut babies = vec![1u64, 0];
+    let mut adults = vec![0u64, 1];
+    for _ in 0..n - 2 {
+        let dying = *babies.get(babies.len() - m).unwrap_or(&0);
+        let last_adults = *adults.last().unwrap();
+        let newbabies = last_adults;
+        let grownups = *babies.last().unwrap();
+        let newadults = last_adults - dying + grownups;
+
+        babies.push(newbabies);
+        adults.push(newadults);
+    }
+
+    let c = adults[adults.len() - 1] + babies[babies.len() - 1];
+    println!("{:?}", c);
+}
+
 fn main() {
     // dna();
     // dna_to_rna();
     // complement();
     // gc();
     // subs();
-    prot();
+    // prot();
+    // grph();
+    // long();
+    // fib();
+    let start = Instant::now();
+    fib2();
+    println!("Elapsed {:?}", start.elapsed());
 }

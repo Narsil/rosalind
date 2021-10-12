@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 pub fn complement_base(c: u8) -> Option<u8> {
@@ -20,7 +21,7 @@ pub enum ParseError {
     UnexpectedData,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DNABase {
     A,
     C,
@@ -108,7 +109,7 @@ impl FromIterator<DNABase> for DNA {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RNABase {
     A,
     C,
@@ -162,68 +163,68 @@ impl RNA {
             .chunks(3)
             .map(|chunk| match &chunk[..] {
                 [RNABase::U, RNABase::U, RNABase::U] => Ok(Protein::F),
-                [RNABase::C, RNABase::U, RNABase::U] => Ok(Protein::L),
-                [RNABase::A, RNABase::U, RNABase::U] => Ok(Protein::I),
-                [RNABase::G, RNABase::U, RNABase::U] => Ok(Protein::V),
                 [RNABase::U, RNABase::U, RNABase::C] => Ok(Protein::F),
-                [RNABase::C, RNABase::U, RNABase::C] => Ok(Protein::L),
-                [RNABase::A, RNABase::U, RNABase::C] => Ok(Protein::I),
-                [RNABase::G, RNABase::U, RNABase::C] => Ok(Protein::V),
                 [RNABase::U, RNABase::U, RNABase::A] => Ok(Protein::L),
-                [RNABase::C, RNABase::U, RNABase::A] => Ok(Protein::L),
-                [RNABase::A, RNABase::U, RNABase::A] => Ok(Protein::I),
-                [RNABase::G, RNABase::U, RNABase::A] => Ok(Protein::V),
                 [RNABase::U, RNABase::U, RNABase::G] => Ok(Protein::L),
-                [RNABase::C, RNABase::U, RNABase::G] => Ok(Protein::L),
-                [RNABase::A, RNABase::U, RNABase::G] => Ok(Protein::M),
-                [RNABase::G, RNABase::U, RNABase::G] => Ok(Protein::V),
                 [RNABase::U, RNABase::C, RNABase::U] => Ok(Protein::S),
-                [RNABase::C, RNABase::C, RNABase::U] => Ok(Protein::P),
-                [RNABase::A, RNABase::C, RNABase::U] => Ok(Protein::T),
-                [RNABase::G, RNABase::C, RNABase::U] => Ok(Protein::A),
                 [RNABase::U, RNABase::C, RNABase::C] => Ok(Protein::S),
-                [RNABase::C, RNABase::C, RNABase::C] => Ok(Protein::P),
-                [RNABase::A, RNABase::C, RNABase::C] => Ok(Protein::T),
-                [RNABase::G, RNABase::C, RNABase::C] => Ok(Protein::A),
                 [RNABase::U, RNABase::C, RNABase::A] => Ok(Protein::S),
-                [RNABase::C, RNABase::C, RNABase::A] => Ok(Protein::P),
-                [RNABase::A, RNABase::C, RNABase::A] => Ok(Protein::T),
-                [RNABase::G, RNABase::C, RNABase::A] => Ok(Protein::A),
                 [RNABase::U, RNABase::C, RNABase::G] => Ok(Protein::S),
-                [RNABase::C, RNABase::C, RNABase::G] => Ok(Protein::P),
-                [RNABase::A, RNABase::C, RNABase::G] => Ok(Protein::T),
-                [RNABase::G, RNABase::C, RNABase::G] => Ok(Protein::A),
                 [RNABase::U, RNABase::A, RNABase::U] => Ok(Protein::Y),
-                [RNABase::C, RNABase::A, RNABase::U] => Ok(Protein::H),
-                [RNABase::A, RNABase::A, RNABase::U] => Ok(Protein::N),
-                [RNABase::G, RNABase::A, RNABase::U] => Ok(Protein::D),
-                [RNABase::U, RNABase::A, RNABase::C] => Ok(Protein::U),
-                [RNABase::C, RNABase::A, RNABase::C] => Ok(Protein::H),
-                [RNABase::A, RNABase::A, RNABase::C] => Ok(Protein::N),
-                [RNABase::G, RNABase::A, RNABase::C] => Ok(Protein::D),
+                [RNABase::U, RNABase::A, RNABase::C] => Ok(Protein::Y),
                 [RNABase::U, RNABase::A, RNABase::A] => Ok(Protein::Stop),
-                [RNABase::C, RNABase::A, RNABase::A] => Ok(Protein::Q),
-                [RNABase::A, RNABase::A, RNABase::A] => Ok(Protein::K),
-                [RNABase::G, RNABase::A, RNABase::A] => Ok(Protein::E),
                 [RNABase::U, RNABase::A, RNABase::G] => Ok(Protein::Stop),
-                [RNABase::C, RNABase::A, RNABase::G] => Ok(Protein::Q),
-                [RNABase::A, RNABase::A, RNABase::G] => Ok(Protein::K),
-                [RNABase::G, RNABase::A, RNABase::G] => Ok(Protein::E),
                 [RNABase::U, RNABase::G, RNABase::U] => Ok(Protein::C),
-                [RNABase::C, RNABase::G, RNABase::U] => Ok(Protein::R),
-                [RNABase::A, RNABase::G, RNABase::U] => Ok(Protein::S),
-                [RNABase::G, RNABase::G, RNABase::U] => Ok(Protein::G),
                 [RNABase::U, RNABase::G, RNABase::C] => Ok(Protein::C),
-                [RNABase::C, RNABase::G, RNABase::C] => Ok(Protein::R),
-                [RNABase::A, RNABase::G, RNABase::C] => Ok(Protein::S),
-                [RNABase::G, RNABase::G, RNABase::C] => Ok(Protein::G),
                 [RNABase::U, RNABase::G, RNABase::A] => Ok(Protein::Stop),
-                [RNABase::C, RNABase::G, RNABase::A] => Ok(Protein::R),
-                [RNABase::A, RNABase::G, RNABase::A] => Ok(Protein::R),
-                [RNABase::G, RNABase::G, RNABase::A] => Ok(Protein::G),
                 [RNABase::U, RNABase::G, RNABase::G] => Ok(Protein::W),
+                [RNABase::C, RNABase::U, RNABase::U] => Ok(Protein::L),
+                [RNABase::C, RNABase::U, RNABase::C] => Ok(Protein::L),
+                [RNABase::C, RNABase::U, RNABase::A] => Ok(Protein::L),
+                [RNABase::C, RNABase::U, RNABase::G] => Ok(Protein::L),
+                [RNABase::C, RNABase::C, RNABase::U] => Ok(Protein::P),
+                [RNABase::C, RNABase::C, RNABase::C] => Ok(Protein::P),
+                [RNABase::C, RNABase::C, RNABase::A] => Ok(Protein::P),
+                [RNABase::C, RNABase::C, RNABase::G] => Ok(Protein::P),
+                [RNABase::C, RNABase::A, RNABase::U] => Ok(Protein::H),
+                [RNABase::C, RNABase::A, RNABase::C] => Ok(Protein::H),
+                [RNABase::C, RNABase::A, RNABase::A] => Ok(Protein::Q),
+                [RNABase::C, RNABase::A, RNABase::G] => Ok(Protein::Q),
+                [RNABase::C, RNABase::G, RNABase::U] => Ok(Protein::R),
+                [RNABase::C, RNABase::G, RNABase::C] => Ok(Protein::R),
+                [RNABase::C, RNABase::G, RNABase::A] => Ok(Protein::R),
                 [RNABase::C, RNABase::G, RNABase::G] => Ok(Protein::R),
+                [RNABase::A, RNABase::U, RNABase::U] => Ok(Protein::I),
+                [RNABase::A, RNABase::U, RNABase::C] => Ok(Protein::I),
+                [RNABase::A, RNABase::U, RNABase::A] => Ok(Protein::I),
+                [RNABase::A, RNABase::U, RNABase::G] => Ok(Protein::M),
+                [RNABase::A, RNABase::C, RNABase::U] => Ok(Protein::T),
+                [RNABase::A, RNABase::C, RNABase::C] => Ok(Protein::T),
+                [RNABase::A, RNABase::C, RNABase::A] => Ok(Protein::T),
+                [RNABase::A, RNABase::C, RNABase::G] => Ok(Protein::T),
+                [RNABase::A, RNABase::A, RNABase::U] => Ok(Protein::N),
+                [RNABase::A, RNABase::A, RNABase::C] => Ok(Protein::N),
+                [RNABase::A, RNABase::A, RNABase::A] => Ok(Protein::K),
+                [RNABase::A, RNABase::A, RNABase::G] => Ok(Protein::K),
+                [RNABase::A, RNABase::G, RNABase::U] => Ok(Protein::S),
+                [RNABase::A, RNABase::G, RNABase::C] => Ok(Protein::S),
+                [RNABase::A, RNABase::G, RNABase::A] => Ok(Protein::R),
                 [RNABase::A, RNABase::G, RNABase::G] => Ok(Protein::R),
+                [RNABase::G, RNABase::U, RNABase::U] => Ok(Protein::V),
+                [RNABase::G, RNABase::U, RNABase::C] => Ok(Protein::V),
+                [RNABase::G, RNABase::U, RNABase::A] => Ok(Protein::V),
+                [RNABase::G, RNABase::U, RNABase::G] => Ok(Protein::V),
+                [RNABase::G, RNABase::C, RNABase::U] => Ok(Protein::A),
+                [RNABase::G, RNABase::C, RNABase::C] => Ok(Protein::A),
+                [RNABase::G, RNABase::C, RNABase::A] => Ok(Protein::A),
+                [RNABase::G, RNABase::C, RNABase::G] => Ok(Protein::A),
+                [RNABase::G, RNABase::A, RNABase::U] => Ok(Protein::D),
+                [RNABase::G, RNABase::A, RNABase::C] => Ok(Protein::D),
+                [RNABase::G, RNABase::A, RNABase::A] => Ok(Protein::E),
+                [RNABase::G, RNABase::A, RNABase::G] => Ok(Protein::E),
+                [RNABase::G, RNABase::G, RNABase::U] => Ok(Protein::G),
+                [RNABase::G, RNABase::G, RNABase::C] => Ok(Protein::G),
+                [RNABase::G, RNABase::G, RNABase::A] => Ok(Protein::G),
                 [RNABase::G, RNABase::G, RNABase::G] => Ok(Protein::G),
                 _ => Err(ProteinError::UnexpectedRNALength),
             })
@@ -265,7 +266,140 @@ impl Strand {
     }
 }
 
-pub type Strands = Vec<Strand>;
+#[derive(Debug)]
+struct Node {
+    subnodes: HashMap<DNABase, Node>,
+    leafs: HashSet<usize>,
+}
+
+impl Node {
+    fn new() -> Self {
+        Self {
+            subnodes: HashMap::new(),
+            leafs: HashSet::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Trie {
+    root: Node,
+}
+
+impl Trie {
+    fn new() -> Self {
+        Self { root: Node::new() }
+    }
+
+    fn add(&mut self, data: &[DNABase], id: usize) {
+        let mut node = &mut self.root;
+
+        for base in data {
+            let subnode = node.subnodes.entry(*base).or_insert(Node::new());
+            node = subnode;
+            node.leafs.insert(id);
+        }
+    }
+    fn from(strands: &[Strand]) -> Trie {
+        let mut trie = Trie::new();
+        for (i, strand) in strands.iter().enumerate() {
+            trie.add(&strand.strand.data, i);
+        }
+        trie
+    }
+}
+
+pub struct Strands {
+    strands: Vec<Strand>,
+}
+
+impl Strands {
+    pub fn new() -> Self {
+        Self { strands: vec![] }
+    }
+
+    pub fn from(strands: Vec<Strand>) -> Self {
+        Self { strands }
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<Strand> {
+        self.strands.iter()
+    }
+
+    pub fn superstring(&self) -> Option<DNA> {
+        let trie = Trie::from(&self.strands);
+
+        let mut all_states = vec![];
+        for strand in &self.strands {
+            let mut states = vec![];
+            for data in &strand.strand.data {
+                states.push((&trie.root, 0));
+                states = states
+                    .into_iter()
+                    .filter_map(|(state, i)| {
+                        if let Some(subnode) = state.subnodes.get(data) {
+                            let newstate = subnode;
+                            Some((newstate, i + 1))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+            }
+            all_states.push(states);
+        }
+
+        // println!("states[0] {:?}", all_states[0][1]);
+
+        let mut match_: Option<Vec<DNABase>> = None;
+        for (i, strand) in self.strands.iter().enumerate() {
+            let mut current_data = strand.strand.data.clone();
+            let mut index = i;
+            let mut visited = HashSet::new();
+            visited.insert(i);
+            loop {
+                let states = &all_states[index];
+                if let Some((state, match_size)) = states.get(1) {
+                    // println!("state {:?}, {:?}", state.leafs, visited);
+                    if let Some(leaf_index) = state
+                        .leafs
+                        .iter()
+                        .filter(|leaf_index| !visited.contains(leaf_index))
+                        .next()
+                    {
+                        // println!("Extending {:?}", leaf_index);
+                        let new_strand = &self.strands[*leaf_index].strand.data;
+                        current_data.extend(new_strand.iter().skip(*match_size));
+                        visited.insert(*leaf_index);
+                        index = *leaf_index;
+                    } else {
+                        break;
+                    }
+                } else {
+                    // finalize match
+                    break;
+                }
+            }
+            // println!("Visited {:?}", visited.len());
+            if visited.len() == self.strands.len() {
+                if let Some(current_match) = &match_ {
+                    if current_match.len() > current_data.len() {
+                        match_ = Some(current_data);
+                    }
+                } else {
+                    match_ = Some(current_data);
+                }
+                // println!("Match {:?}", match_);
+            }
+            // println!("----");
+        }
+        if let Some(match_) = match_ {
+            Some(DNA { data: match_ })
+        } else {
+            None
+        }
+    }
+}
 
 pub enum ParseState {
     NAME,
@@ -329,7 +463,7 @@ pub fn parse_fasta(string: &[u8]) -> Result<Strands, ParseError> {
             strand: DNA { data },
         });
     }
-    Ok(strands)
+    Ok(Strands::from(strands))
 }
 
 pub fn parse_dna(string: &[u8]) -> Result<DNA, ParseError> {
