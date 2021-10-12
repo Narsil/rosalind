@@ -1,4 +1,4 @@
-use rosalind::{complement_base, parse_dna, parse_fasta};
+use rosalind::{complement_base, parse_dna, parse_fasta, parse_rna};
 use std::collections::HashMap;
 
 ////////////////////////////////////
@@ -62,15 +62,25 @@ pub fn subs() {
     let tokens = string.split(|c| c == &b'\n').collect::<Vec<_>>();
     let data = parse_dna(tokens[0]).unwrap();
     let pattern = parse_dna(tokens[1]).unwrap();
-    for i in pattern.find_locus(&data).enumerate() {
-        print!("{:?} ", i);
+    for i in pattern.find(&data) {
+        print!("{:?} ", i + 1);
     }
 }
 
+pub fn prot() {
+    let filename = "data/prot.txt";
+    let string = std::fs::read(filename).unwrap();
+    let rna = parse_rna(&string[..string.len() - 1]).unwrap();
+    let proteins = rna.proteins().unwrap();
+    for p in &proteins[..proteins.len() - 1] {
+        print!("{:?}", p);
+    }
+}
 fn main() {
     // dna();
     // dna_to_rna();
     // complement();
     // gc();
-    subs();
+    // subs();
+    prot();
 }
