@@ -191,6 +191,51 @@ pub fn cons() {
     }
 }
 
+fn p_dominate(k: usize, m: usize, n: usize) -> f32 {
+    let total = m + n + k;
+    let total_ = total - 1;
+    let p_n = n as f32 / total as f32;
+    let p_n_m = m as f32 / total_ as f32;
+    let p_n_n = (n - 1) as f32 / total_ as f32;
+    let p_m = m as f32 / total as f32;
+    let p_m_m = (m - 1) as f32 / total_ as f32;
+    let p_m_n = n as f32 / total_ as f32;
+
+    let p = p_n * p_n_n + p_n * p_n_m * 0.5 + 0.5 * p_m * p_m_n + 0.25 * p_m * p_m_m;
+    1.0 - p
+}
+
+pub fn iprb() {
+    let filename = "data/iprb.txt";
+    let string = std::fs::read(filename).unwrap();
+    let mut string = String::from_utf8(string).unwrap();
+    string = string.trim().to_string();
+    let tokens = string.split(' ').collect::<Vec<_>>();
+
+    let k: usize = tokens[0].parse().unwrap();
+    let m: usize = tokens[1].parse().unwrap();
+    let n: usize = tokens[2].parse().unwrap();
+
+    println!("{:?}", p_dominate(k, m, n));
+}
+pub fn iev() {
+    let filename = "data/iev.txt";
+    let string = std::fs::read(filename).unwrap();
+    let mut string = String::from_utf8(string).unwrap();
+    string = string.trim().to_string();
+    let tokens = string.split(' ').collect::<Vec<_>>();
+
+    let a: f32 = tokens[0].parse().unwrap();
+    let b: f32 = tokens[1].parse().unwrap();
+    let c: f32 = tokens[2].parse().unwrap();
+    let d: f32 = tokens[3].parse().unwrap();
+    let e: f32 = tokens[4].parse().unwrap();
+    let _f: f32 = tokens[5].parse().unwrap();
+
+    let out = 2.0 * a + b + 2.0 * c + 2.0 * 0.75 * d + e;
+    println!("{:?}", out);
+}
+
 fn main() {
     // dna();
     // dna_to_rna();
@@ -204,7 +249,8 @@ fn main() {
     // fibd();
     // mrna();
     // cons();
+    // iprb();
     let start = Instant::now();
-
+    iev();
     println!("Elapsed {:?}", start.elapsed());
 }
