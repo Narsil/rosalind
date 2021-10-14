@@ -1,4 +1,4 @@
-use rosalind::{complement_base, parse_dna, parse_fasta, parse_rna};
+use rosalind::{complement_base, parse_dna, parse_fasta, parse_prot, parse_rna, DNABase};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -126,7 +126,7 @@ pub fn fib() {
     println!("{:?}", b);
 }
 
-pub fn fib2() {
+pub fn fibd() {
     let filename = "data/fibd.txt";
     let string = std::fs::read(filename).unwrap();
     let mut string = String::from_utf8(string).unwrap();
@@ -152,6 +152,44 @@ pub fn fib2() {
     let c = adults[adults.len() - 1] + babies[babies.len() - 1];
     println!("{:?}", c);
 }
+pub fn mrna() {
+    let filename = "data/mrna.txt";
+    let string = std::fs::read(filename).unwrap();
+    let prot = parse_prot(&string[..string.len() - 1]).unwrap();
+
+    let mut p = 1;
+    for aa in prot {
+        let n = aa.encodings().len();
+        p *= n;
+        p = p % 1_000_000;
+    }
+    println!("{:?}", p);
+}
+pub fn cons() {
+    let filename = "data/cons.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta(&string).unwrap();
+
+    let profile = strands.profile_matrix().unwrap();
+
+    for possibilities in &profile {
+        let index = possibilities
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.cmp(b))
+            .map(|(index, _)| index)
+            .unwrap();
+        print!("{:?}", DNABase::bases()[index]);
+    }
+    println!("");
+    for i in 0..4 {
+        print!("{:?}: ", DNABase::bases()[i]);
+        for p in profile.iter() {
+            print!("{:?} ", p[i]);
+        }
+        println!("");
+    }
+}
 
 fn main() {
     // dna();
@@ -163,7 +201,10 @@ fn main() {
     // grph();
     // long();
     // fib();
+    // fibd();
+    // mrna();
+    // cons();
     let start = Instant::now();
-    fib2();
+
     println!("Elapsed {:?}", start.elapsed());
 }
