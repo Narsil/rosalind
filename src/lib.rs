@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
-pub fn complement_base(c: u8) -> Option<u8> {
-    match c {
-        b'A' => Some(b'T'),
-        b'T' => Some(b'A'),
-        b'C' => Some(b'G'),
-        b'G' => Some(b'C'),
-        _ => None,
+pub mod individuals;
+
+pub trait Base:
+    std::hash::Hash + Eq + Clone + Copy + std::convert::TryFrom<u8> + std::fmt::Debug
+{
+    fn terminal() -> Option<Self> {
+        None
     }
 }
 
@@ -28,6 +28,20 @@ pub enum DNABase {
     G,
     T,
 }
+impl std::convert::TryFrom<u8> for DNABase {
+    type Error = ParseError;
+
+    fn try_from(c: u8) -> Result<Self, ParseError> {
+        match c {
+            b'A' => Ok(DNABase::A),
+            b'C' => Ok(DNABase::C),
+            b'G' => Ok(DNABase::G),
+            b'T' => Ok(DNABase::T),
+            _ => Err(ParseError::UnexpectedData),
+        }
+    }
+}
+impl Base for DNABase {}
 
 impl DNABase {
     pub fn index(&self) -> usize {
@@ -38,38 +52,52 @@ impl DNABase {
             DNABase::T => 3,
         }
     }
+
     pub fn bases() -> [DNABase; 4] {
         [DNABase::A, DNABase::C, DNABase::G, DNABase::T]
     }
+
+    pub fn complement(&self) -> DNABase {
+        match self {
+            DNABase::A => DNABase::T,
+            DNABase::T => DNABase::A,
+            DNABase::C => DNABase::G,
+            DNABase::G => DNABase::C,
+        }
+    }
+
+    pub fn rna(&self) -> RNABase {
+        match self {
+            DNABase::A => RNABase::A,
+            DNABase::T => RNABase::U,
+            DNABase::C => RNABase::C,
+            DNABase::G => RNABase::G,
+        }
+    }
 }
 
-#[derive(Debug)]
-pub struct DNA {
-    pub data: Vec<DNABase>,
-}
-
-pub struct DNAIterator<'a, 'b> {
-    pattern_strand: &'a DNA,
-    data_strand: &'b DNA,
+pub struct StrandIterator<'a, 'b, T: Base> {
+    pattern_strand: &'a [T],
+    data_strand: &'b [T],
     matches: Vec<(usize, usize)>,
     index: usize,
 }
 
-impl<'a, 'b> Iterator for DNAIterator<'a, 'b> {
+impl<'a, 'b, T: Base> Iterator for StrandIterator<'a, 'b, T> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.index < self.data_strand.data.len() {
-            let c = self.data_strand.data[self.index];
+        while self.index < self.data_strand.len() {
+            let c = self.data_strand[self.index];
 
             let mut matched = None;
             self.matches = self
                 .matches
                 .iter()
                 .filter_map(|(data_index, pattern_index)| {
-                    if self.pattern_strand.data.get(pattern_index + 1) == Some(&c) {
+                    if self.pattern_strand.get(pattern_index + 1) == Some(&c) {
                         // Matching
-                        if self.pattern_strand.data.len() == pattern_index + 2 {
+                        if self.pattern_strand.len() == pattern_index + 2 {
                             // Final match
                             matched = Some(*data_index);
                         }
@@ -79,10 +107,10 @@ impl<'a, 'b> Iterator for DNAIterator<'a, 'b> {
                     }
                 })
                 .collect();
-            if c == self.pattern_strand.data[0] {
-                if self.pattern_strand.data.len() == 1 {
+            if c == self.pattern_strand[0] {
+                if self.pattern_strand.len() == 1 {
                     // Final match
-                    assert!(self.matches.len() == 0);
+                    assert!(self.matches.is_empty());
                     matched = Some(self.index);
                 } else {
                     self.matches.push((self.index, 0));
@@ -97,32 +125,6 @@ impl<'a, 'b> Iterator for DNAIterator<'a, 'b> {
     }
 }
 
-impl DNA {
-    pub fn new() -> Self {
-        Self { data: vec![] }
-    }
-    pub fn find<'a, 'b>(&'a self, data_strand: &'b DNA) -> DNAIterator<'a, 'b> {
-        DNAIterator {
-            pattern_strand: self,
-            data_strand,
-            matches: vec![],
-            index: 0,
-        }
-    }
-}
-
-impl FromIterator<DNABase> for DNA {
-    fn from_iter<I: IntoIterator<Item = DNABase>>(iter: I) -> Self {
-        let mut c = DNA::new();
-
-        for i in iter {
-            c.data.push(i);
-        }
-
-        c
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RNABase {
     A,
@@ -130,6 +132,20 @@ pub enum RNABase {
     G,
     U,
 }
+impl std::convert::TryFrom<u8> for RNABase {
+    type Error = ParseError;
+
+    fn try_from(c: u8) -> Result<Self, ParseError> {
+        match c {
+            b'A' => Ok(RNABase::A),
+            b'C' => Ok(RNABase::C),
+            b'G' => Ok(RNABase::G),
+            b'U' => Ok(RNABase::U),
+            _ => Err(ParseError::UnexpectedData),
+        }
+    }
+}
+impl Base for RNABase {}
 
 impl RNABase {
     pub fn bases() -> [RNABase; 4] {
@@ -139,8 +155,8 @@ impl RNABase {
 
 type Codon = (RNABase, RNABase, RNABase);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Protein {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AA {
     F,
     L,
     S,
@@ -163,15 +179,74 @@ pub enum Protein {
     E,
     G,
 }
+impl std::convert::TryFrom<u8> for AA {
+    type Error = ParseError;
 
-impl Protein {
+    fn try_from(c: u8) -> Result<Self, ParseError> {
+        match c {
+            b'F' => Ok(AA::F),
+            b'L' => Ok(AA::L),
+            b'S' => Ok(AA::S),
+            b'Y' => Ok(AA::Y),
+            b'C' => Ok(AA::C),
+            b'W' => Ok(AA::W),
+            b'P' => Ok(AA::P),
+            b'H' => Ok(AA::H),
+            b'Q' => Ok(AA::Q),
+            b'R' => Ok(AA::R),
+            b'I' => Ok(AA::I),
+            b'M' => Ok(AA::M),
+            b'T' => Ok(AA::T),
+            b'N' => Ok(AA::N),
+            b'K' => Ok(AA::K),
+            b'V' => Ok(AA::V),
+            b'A' => Ok(AA::A),
+            b'D' => Ok(AA::D),
+            b'E' => Ok(AA::E),
+            b'G' => Ok(AA::G),
+            _ => Err(ParseError::UnexpectedData),
+        }
+    }
+}
+impl Base for AA {
+    fn terminal() -> Option<Self> {
+        Some(AA::Stop)
+    }
+}
+
+impl AA {
+    pub fn weight(&self) -> f32 {
+        match self {
+            AA::A => 71.03711,
+            AA::C => 103.00919,
+            AA::D => 115.02694,
+            AA::E => 129.04259,
+            AA::F => 147.06841,
+            AA::G => 57.02146,
+            AA::H => 137.05891,
+            AA::I => 113.08406,
+            AA::K => 128.09496,
+            AA::L => 113.08406,
+            AA::M => 131.04049,
+            AA::N => 114.04293,
+            AA::P => 97.05276,
+            AA::Q => 128.05858,
+            AA::R => 156.10111,
+            AA::S => 87.03203,
+            AA::T => 101.04768,
+            AA::V => 99.06841,
+            AA::W => 186.07931,
+            AA::Y => 163.06333,
+            AA::Stop => 0.0,
+        }
+    }
     pub fn encodings(&self) -> Vec<Codon> {
         match self {
-            Protein::F => vec![
+            AA::F => vec![
                 (RNABase::U, RNABase::U, RNABase::U),
                 (RNABase::U, RNABase::U, RNABase::C),
             ],
-            Protein::L => vec![
+            AA::L => vec![
                 (RNABase::U, RNABase::U, RNABase::A),
                 (RNABase::U, RNABase::U, RNABase::G),
                 (RNABase::C, RNABase::U, RNABase::U),
@@ -179,7 +254,7 @@ impl Protein {
                 (RNABase::C, RNABase::U, RNABase::A),
                 (RNABase::C, RNABase::U, RNABase::G),
             ],
-            Protein::S => vec![
+            AA::S => vec![
                 (RNABase::U, RNABase::C, RNABase::U),
                 (RNABase::U, RNABase::C, RNABase::C),
                 (RNABase::U, RNABase::C, RNABase::A),
@@ -187,35 +262,35 @@ impl Protein {
                 (RNABase::A, RNABase::G, RNABase::U),
                 (RNABase::A, RNABase::G, RNABase::C),
             ],
-            Protein::Y => vec![
+            AA::Y => vec![
                 (RNABase::U, RNABase::A, RNABase::U),
                 (RNABase::U, RNABase::A, RNABase::C),
             ],
-            Protein::Stop => vec![
+            AA::Stop => vec![
                 (RNABase::U, RNABase::A, RNABase::A),
                 (RNABase::U, RNABase::A, RNABase::G),
                 (RNABase::U, RNABase::G, RNABase::A),
             ],
-            Protein::C => vec![
+            AA::C => vec![
                 (RNABase::U, RNABase::G, RNABase::U),
                 (RNABase::U, RNABase::G, RNABase::C),
             ],
-            Protein::W => vec![(RNABase::U, RNABase::G, RNABase::G)],
-            Protein::P => vec![
+            AA::W => vec![(RNABase::U, RNABase::G, RNABase::G)],
+            AA::P => vec![
                 (RNABase::C, RNABase::C, RNABase::U),
                 (RNABase::C, RNABase::C, RNABase::C),
                 (RNABase::C, RNABase::C, RNABase::A),
                 (RNABase::C, RNABase::C, RNABase::G),
             ],
-            Protein::H => vec![
+            AA::H => vec![
                 (RNABase::C, RNABase::A, RNABase::U),
                 (RNABase::C, RNABase::A, RNABase::C),
             ],
-            Protein::Q => vec![
+            AA::Q => vec![
                 (RNABase::C, RNABase::A, RNABase::A),
                 (RNABase::C, RNABase::A, RNABase::G),
             ],
-            Protein::R => vec![
+            AA::R => vec![
                 (RNABase::C, RNABase::G, RNABase::U),
                 (RNABase::C, RNABase::G, RNABase::C),
                 (RNABase::C, RNABase::G, RNABase::A),
@@ -223,47 +298,47 @@ impl Protein {
                 (RNABase::A, RNABase::G, RNABase::A),
                 (RNABase::A, RNABase::G, RNABase::G),
             ],
-            Protein::I => vec![
+            AA::I => vec![
                 (RNABase::A, RNABase::U, RNABase::U),
                 (RNABase::A, RNABase::U, RNABase::C),
                 (RNABase::A, RNABase::U, RNABase::A),
             ],
-            Protein::M => vec![(RNABase::A, RNABase::U, RNABase::G)],
-            Protein::T => vec![
+            AA::M => vec![(RNABase::A, RNABase::U, RNABase::G)],
+            AA::T => vec![
                 (RNABase::A, RNABase::C, RNABase::U),
                 (RNABase::A, RNABase::C, RNABase::C),
                 (RNABase::A, RNABase::C, RNABase::A),
                 (RNABase::A, RNABase::C, RNABase::G),
             ],
-            Protein::N => vec![
+            AA::N => vec![
                 (RNABase::A, RNABase::A, RNABase::U),
                 (RNABase::A, RNABase::A, RNABase::C),
             ],
-            Protein::K => vec![
+            AA::K => vec![
                 (RNABase::A, RNABase::A, RNABase::A),
                 (RNABase::A, RNABase::A, RNABase::G),
             ],
-            Protein::V => vec![
+            AA::V => vec![
                 (RNABase::G, RNABase::U, RNABase::U),
                 (RNABase::G, RNABase::U, RNABase::C),
                 (RNABase::G, RNABase::U, RNABase::A),
                 (RNABase::G, RNABase::U, RNABase::G),
             ],
-            Protein::A => vec![
+            AA::A => vec![
                 (RNABase::G, RNABase::C, RNABase::U),
                 (RNABase::G, RNABase::C, RNABase::C),
                 (RNABase::G, RNABase::C, RNABase::A),
                 (RNABase::G, RNABase::C, RNABase::G),
             ],
-            Protein::D => vec![
+            AA::D => vec![
                 (RNABase::G, RNABase::A, RNABase::U),
                 (RNABase::G, RNABase::A, RNABase::C),
             ],
-            Protein::E => vec![
+            AA::E => vec![
                 (RNABase::G, RNABase::A, RNABase::A),
                 (RNABase::G, RNABase::A, RNABase::G),
             ],
-            Protein::G => vec![
+            AA::G => vec![
                 (RNABase::G, RNABase::G, RNABase::U),
                 (RNABase::G, RNABase::G, RNABase::C),
                 (RNABase::G, RNABase::G, RNABase::A),
@@ -274,135 +349,216 @@ impl Protein {
 }
 
 #[derive(Debug)]
-pub enum ProteinError {
+pub enum AAError {
     UnexpectedRNALength,
 }
 
-pub struct RNA {
-    pub data: Vec<RNABase>,
-}
-
-impl RNA {
-    pub fn new() -> Self {
-        Self { data: vec![] }
-    }
-
-    pub fn proteins(&self) -> Result<Vec<Protein>, ProteinError> {
+impl Strand<RNABase> {
+    pub fn protein(&self) -> Result<Vec<AA>, AAError> {
         let protein: Result<Vec<_>, _> = self
-            .data
+            .strand
             .chunks(3)
-            .map(|chunk| match &chunk[..] {
-                [RNABase::U, RNABase::U, RNABase::U] => Ok(Protein::F),
-                [RNABase::U, RNABase::U, RNABase::C] => Ok(Protein::F),
-                [RNABase::U, RNABase::U, RNABase::A] => Ok(Protein::L),
-                [RNABase::U, RNABase::U, RNABase::G] => Ok(Protein::L),
-                [RNABase::U, RNABase::C, RNABase::U] => Ok(Protein::S),
-                [RNABase::U, RNABase::C, RNABase::C] => Ok(Protein::S),
-                [RNABase::U, RNABase::C, RNABase::A] => Ok(Protein::S),
-                [RNABase::U, RNABase::C, RNABase::G] => Ok(Protein::S),
-                [RNABase::U, RNABase::A, RNABase::U] => Ok(Protein::Y),
-                [RNABase::U, RNABase::A, RNABase::C] => Ok(Protein::Y),
-                [RNABase::U, RNABase::A, RNABase::A] => Ok(Protein::Stop),
-                [RNABase::U, RNABase::A, RNABase::G] => Ok(Protein::Stop),
-                [RNABase::U, RNABase::G, RNABase::U] => Ok(Protein::C),
-                [RNABase::U, RNABase::G, RNABase::C] => Ok(Protein::C),
-                [RNABase::U, RNABase::G, RNABase::A] => Ok(Protein::Stop),
-                [RNABase::U, RNABase::G, RNABase::G] => Ok(Protein::W),
-                [RNABase::C, RNABase::U, RNABase::U] => Ok(Protein::L),
-                [RNABase::C, RNABase::U, RNABase::C] => Ok(Protein::L),
-                [RNABase::C, RNABase::U, RNABase::A] => Ok(Protein::L),
-                [RNABase::C, RNABase::U, RNABase::G] => Ok(Protein::L),
-                [RNABase::C, RNABase::C, RNABase::U] => Ok(Protein::P),
-                [RNABase::C, RNABase::C, RNABase::C] => Ok(Protein::P),
-                [RNABase::C, RNABase::C, RNABase::A] => Ok(Protein::P),
-                [RNABase::C, RNABase::C, RNABase::G] => Ok(Protein::P),
-                [RNABase::C, RNABase::A, RNABase::U] => Ok(Protein::H),
-                [RNABase::C, RNABase::A, RNABase::C] => Ok(Protein::H),
-                [RNABase::C, RNABase::A, RNABase::A] => Ok(Protein::Q),
-                [RNABase::C, RNABase::A, RNABase::G] => Ok(Protein::Q),
-                [RNABase::C, RNABase::G, RNABase::U] => Ok(Protein::R),
-                [RNABase::C, RNABase::G, RNABase::C] => Ok(Protein::R),
-                [RNABase::C, RNABase::G, RNABase::A] => Ok(Protein::R),
-                [RNABase::C, RNABase::G, RNABase::G] => Ok(Protein::R),
-                [RNABase::A, RNABase::U, RNABase::U] => Ok(Protein::I),
-                [RNABase::A, RNABase::U, RNABase::C] => Ok(Protein::I),
-                [RNABase::A, RNABase::U, RNABase::A] => Ok(Protein::I),
-                [RNABase::A, RNABase::U, RNABase::G] => Ok(Protein::M),
-                [RNABase::A, RNABase::C, RNABase::U] => Ok(Protein::T),
-                [RNABase::A, RNABase::C, RNABase::C] => Ok(Protein::T),
-                [RNABase::A, RNABase::C, RNABase::A] => Ok(Protein::T),
-                [RNABase::A, RNABase::C, RNABase::G] => Ok(Protein::T),
-                [RNABase::A, RNABase::A, RNABase::U] => Ok(Protein::N),
-                [RNABase::A, RNABase::A, RNABase::C] => Ok(Protein::N),
-                [RNABase::A, RNABase::A, RNABase::A] => Ok(Protein::K),
-                [RNABase::A, RNABase::A, RNABase::G] => Ok(Protein::K),
-                [RNABase::A, RNABase::G, RNABase::U] => Ok(Protein::S),
-                [RNABase::A, RNABase::G, RNABase::C] => Ok(Protein::S),
-                [RNABase::A, RNABase::G, RNABase::A] => Ok(Protein::R),
-                [RNABase::A, RNABase::G, RNABase::G] => Ok(Protein::R),
-                [RNABase::G, RNABase::U, RNABase::U] => Ok(Protein::V),
-                [RNABase::G, RNABase::U, RNABase::C] => Ok(Protein::V),
-                [RNABase::G, RNABase::U, RNABase::A] => Ok(Protein::V),
-                [RNABase::G, RNABase::U, RNABase::G] => Ok(Protein::V),
-                [RNABase::G, RNABase::C, RNABase::U] => Ok(Protein::A),
-                [RNABase::G, RNABase::C, RNABase::C] => Ok(Protein::A),
-                [RNABase::G, RNABase::C, RNABase::A] => Ok(Protein::A),
-                [RNABase::G, RNABase::C, RNABase::G] => Ok(Protein::A),
-                [RNABase::G, RNABase::A, RNABase::U] => Ok(Protein::D),
-                [RNABase::G, RNABase::A, RNABase::C] => Ok(Protein::D),
-                [RNABase::G, RNABase::A, RNABase::A] => Ok(Protein::E),
-                [RNABase::G, RNABase::A, RNABase::G] => Ok(Protein::E),
-                [RNABase::G, RNABase::G, RNABase::U] => Ok(Protein::G),
-                [RNABase::G, RNABase::G, RNABase::C] => Ok(Protein::G),
-                [RNABase::G, RNABase::G, RNABase::A] => Ok(Protein::G),
-                [RNABase::G, RNABase::G, RNABase::G] => Ok(Protein::G),
-                _ => Err(ProteinError::UnexpectedRNALength),
+            .map(|chunk| match chunk {
+                [RNABase::U, RNABase::U, RNABase::U] => Ok(AA::F),
+                [RNABase::U, RNABase::U, RNABase::C] => Ok(AA::F),
+                [RNABase::U, RNABase::U, RNABase::A] => Ok(AA::L),
+                [RNABase::U, RNABase::U, RNABase::G] => Ok(AA::L),
+                [RNABase::U, RNABase::C, RNABase::U] => Ok(AA::S),
+                [RNABase::U, RNABase::C, RNABase::C] => Ok(AA::S),
+                [RNABase::U, RNABase::C, RNABase::A] => Ok(AA::S),
+                [RNABase::U, RNABase::C, RNABase::G] => Ok(AA::S),
+                [RNABase::U, RNABase::A, RNABase::U] => Ok(AA::Y),
+                [RNABase::U, RNABase::A, RNABase::C] => Ok(AA::Y),
+                [RNABase::U, RNABase::A, RNABase::A] => Ok(AA::Stop),
+                [RNABase::U, RNABase::A, RNABase::G] => Ok(AA::Stop),
+                [RNABase::U, RNABase::G, RNABase::U] => Ok(AA::C),
+                [RNABase::U, RNABase::G, RNABase::C] => Ok(AA::C),
+                [RNABase::U, RNABase::G, RNABase::A] => Ok(AA::Stop),
+                [RNABase::U, RNABase::G, RNABase::G] => Ok(AA::W),
+                [RNABase::C, RNABase::U, RNABase::U] => Ok(AA::L),
+                [RNABase::C, RNABase::U, RNABase::C] => Ok(AA::L),
+                [RNABase::C, RNABase::U, RNABase::A] => Ok(AA::L),
+                [RNABase::C, RNABase::U, RNABase::G] => Ok(AA::L),
+                [RNABase::C, RNABase::C, RNABase::U] => Ok(AA::P),
+                [RNABase::C, RNABase::C, RNABase::C] => Ok(AA::P),
+                [RNABase::C, RNABase::C, RNABase::A] => Ok(AA::P),
+                [RNABase::C, RNABase::C, RNABase::G] => Ok(AA::P),
+                [RNABase::C, RNABase::A, RNABase::U] => Ok(AA::H),
+                [RNABase::C, RNABase::A, RNABase::C] => Ok(AA::H),
+                [RNABase::C, RNABase::A, RNABase::A] => Ok(AA::Q),
+                [RNABase::C, RNABase::A, RNABase::G] => Ok(AA::Q),
+                [RNABase::C, RNABase::G, RNABase::U] => Ok(AA::R),
+                [RNABase::C, RNABase::G, RNABase::C] => Ok(AA::R),
+                [RNABase::C, RNABase::G, RNABase::A] => Ok(AA::R),
+                [RNABase::C, RNABase::G, RNABase::G] => Ok(AA::R),
+                [RNABase::A, RNABase::U, RNABase::U] => Ok(AA::I),
+                [RNABase::A, RNABase::U, RNABase::C] => Ok(AA::I),
+                [RNABase::A, RNABase::U, RNABase::A] => Ok(AA::I),
+                [RNABase::A, RNABase::U, RNABase::G] => Ok(AA::M),
+                [RNABase::A, RNABase::C, RNABase::U] => Ok(AA::T),
+                [RNABase::A, RNABase::C, RNABase::C] => Ok(AA::T),
+                [RNABase::A, RNABase::C, RNABase::A] => Ok(AA::T),
+                [RNABase::A, RNABase::C, RNABase::G] => Ok(AA::T),
+                [RNABase::A, RNABase::A, RNABase::U] => Ok(AA::N),
+                [RNABase::A, RNABase::A, RNABase::C] => Ok(AA::N),
+                [RNABase::A, RNABase::A, RNABase::A] => Ok(AA::K),
+                [RNABase::A, RNABase::A, RNABase::G] => Ok(AA::K),
+                [RNABase::A, RNABase::G, RNABase::U] => Ok(AA::S),
+                [RNABase::A, RNABase::G, RNABase::C] => Ok(AA::S),
+                [RNABase::A, RNABase::G, RNABase::A] => Ok(AA::R),
+                [RNABase::A, RNABase::G, RNABase::G] => Ok(AA::R),
+                [RNABase::G, RNABase::U, RNABase::U] => Ok(AA::V),
+                [RNABase::G, RNABase::U, RNABase::C] => Ok(AA::V),
+                [RNABase::G, RNABase::U, RNABase::A] => Ok(AA::V),
+                [RNABase::G, RNABase::U, RNABase::G] => Ok(AA::V),
+                [RNABase::G, RNABase::C, RNABase::U] => Ok(AA::A),
+                [RNABase::G, RNABase::C, RNABase::C] => Ok(AA::A),
+                [RNABase::G, RNABase::C, RNABase::A] => Ok(AA::A),
+                [RNABase::G, RNABase::C, RNABase::G] => Ok(AA::A),
+                [RNABase::G, RNABase::A, RNABase::U] => Ok(AA::D),
+                [RNABase::G, RNABase::A, RNABase::C] => Ok(AA::D),
+                [RNABase::G, RNABase::A, RNABase::A] => Ok(AA::E),
+                [RNABase::G, RNABase::A, RNABase::G] => Ok(AA::E),
+                [RNABase::G, RNABase::G, RNABase::U] => Ok(AA::G),
+                [RNABase::G, RNABase::G, RNABase::C] => Ok(AA::G),
+                [RNABase::G, RNABase::G, RNABase::A] => Ok(AA::G),
+                [RNABase::G, RNABase::G, RNABase::G] => Ok(AA::G),
+                _ => Err(AAError::UnexpectedRNALength),
             })
             .collect();
         protein
     }
 }
 
-impl FromIterator<RNABase> for RNA {
-    fn from_iter<I: IntoIterator<Item = RNABase>>(iter: I) -> Self {
-        let mut c = RNA::new();
+#[derive(Debug)]
+pub struct Strand<T> {
+    pub name: String,
+    pub strand: Vec<T>,
+}
 
-        for i in iter {
-            c.data.push(i);
+impl<T: Base> Strand<T> {
+    pub fn find<'a, 'b>(&'a self, data_strand: &'b [T]) -> StrandIterator<'a, 'b, T> {
+        StrandIterator {
+            pattern_strand: &self.strand,
+            data_strand,
+            matches: vec![],
+            index: 0,
         }
-
-        c
     }
 }
 
-#[derive(Debug)]
-pub struct Strand {
-    pub name: String,
-    pub strand: DNA,
+impl<T: Base> std::fmt::Display for Strand<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        let n = self.strand.len();
+        let last = if T::terminal().is_some() { n - 1 } else { n };
+        for base in &self.strand[..last] {
+            write!(f, "{:?}", base)?;
+        }
+        Ok(())
+    }
 }
 
-impl Strand {
+fn candidate_proteins(rna: &[RNABase]) -> Vec<Vec<AA>> {
+    let mut patterns = HashMap::new();
+    for encoding in AA::M.encodings() {
+        patterns.insert(encoding, AA::M);
+    }
+    for encoding in AA::Stop.encodings() {
+        patterns.insert(encoding, AA::Stop);
+    }
+    let mut outputs = vec![];
+    let mut starts = [vec![], vec![], vec![]];
+
+    for (i, window) in rna.windows(3).enumerate() {
+        let bucket = i % 3;
+        if let [a, b, c] = window {
+            if let Some(aa) = patterns.get(&(*a, *b, *c)) {
+                match aa {
+                    AA::Stop => {
+                        let current_starts = &starts[bucket];
+                        for st in current_starts {
+                            let protein = Strand {
+                                name: "".to_string(),
+                                strand: rna[*st..=i + 2].to_vec(),
+                            }
+                            .protein()
+                            .unwrap();
+                            outputs.push(protein);
+                        }
+                        starts[bucket].clear();
+                    }
+                    AA::M => {
+                        starts[bucket].push(i);
+                    }
+
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+    outputs
+}
+
+impl Strand<DNABase> {
     pub fn gc(&self) -> f32 {
         let sum = self
             .strand
-            .data
             .iter()
-            .filter(|c| match c {
-                DNABase::C | DNABase::G => true,
-                _ => false,
-            })
+            .filter(|c| matches!(c, DNABase::C | DNABase::G))
             .count();
-        sum as f32 / self.strand.data.len() as f32
+        sum as f32 / self.strand.len() as f32
+    }
+
+    pub fn complement(&self) -> Self {
+        let out = &self
+            .strand
+            .iter()
+            .map(|c| c.complement())
+            .rev()
+            .collect::<Vec<_>>();
+        Strand {
+            name: "".to_string(),
+            strand: out.to_vec(),
+        }
+    }
+
+    pub fn rna(&self) -> Strand<RNABase> {
+        let mut strand = Vec::with_capacity(self.strand.len());
+        for dbase in &self.strand {
+            strand.push(dbase.rna());
+        }
+        Strand {
+            name: self.name.clone(),
+            strand,
+        }
+    }
+    pub fn candidate_proteins(&self) -> Strands<AA> {
+        let mut left = candidate_proteins(&self.rna().strand);
+        left.extend(candidate_proteins(&self.complement().rna().strand));
+        let deduplicate: HashSet<_> = left.into_iter().collect();
+        let strands = deduplicate.into_iter();
+        Strands {
+            strands: strands
+                .map(|prot| Strand {
+                    name: "".to_string(),
+                    strand: prot,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn find_palindromes(&self, n: usize, m: usize) -> Vec<(usize, usize)> {
+        vec![]
     }
 }
 
-#[derive(Debug)]
-struct Node {
-    subnodes: HashMap<DNABase, Node>,
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Node<T: Base> {
+    subnodes: HashMap<T, Node<T>>,
     leafs: HashSet<usize>,
 }
 
-impl Node {
+impl<T: Base> Node<T> {
     fn new() -> Self {
         Self {
             subnodes: HashMap::new(),
@@ -411,36 +567,51 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
-struct Trie {
-    root: Node,
+#[derive(Debug, Eq, PartialEq)]
+struct Trie<T: Base> {
+    root: Node<T>,
 }
 
-impl Trie {
+impl<T: Base> Trie<T> {
     fn new() -> Self {
         Self { root: Node::new() }
     }
 
-    fn add(&mut self, data: &[DNABase], id: usize) {
+    fn add(&mut self, data: &[T], id: usize) {
         let mut node = &mut self.root;
+        node.leafs.insert(id);
 
         for base in data {
-            let subnode = node.subnodes.entry(*base).or_insert(Node::new());
+            let subnode = node.subnodes.entry(*base).or_insert_with(Node::new);
+            subnode.leafs.insert(id);
             node = subnode;
-            node.leafs.insert(id);
         }
     }
-    fn from(strands: &[Strand]) -> Trie {
+
+    fn from(strands: &[Strand<T>]) -> Trie<T> {
         let mut trie = Trie::new();
         for (i, strand) in strands.iter().enumerate() {
-            trie.add(&strand.strand.data, i);
+            trie.add(&strand.strand, i);
         }
         trie
     }
+
+    fn find_longest(&self, pattern: &[T]) -> Vec<T> {
+        let mut node = &self.root;
+        for (i, base) in pattern.iter().enumerate() {
+            if let Some(subnode) = node.subnodes.get(base) {
+                node = subnode;
+            } else {
+                return pattern[..i].to_vec();
+            }
+        }
+        pattern.to_vec()
+    }
 }
 
-pub struct Strands {
-    strands: Vec<Strand>,
+#[derive(Debug)]
+pub struct Strands<T> {
+    pub strands: Vec<Strand<T>>,
 }
 
 #[derive(Debug)]
@@ -449,49 +620,61 @@ pub enum StrandError {
     LengthsAreDifferent,
 }
 
-impl Strands {
+impl<T: Base> Default for Strands<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Base> Strands<T> {
     pub fn new() -> Self {
         Self { strands: vec![] }
     }
 
-    pub fn from(strands: Vec<Strand>) -> Self {
+    pub fn from(strands: Vec<Strand<T>>) -> Self {
         Self { strands }
     }
 
-    pub fn iter(&self) -> std::slice::Iter<Strand> {
+    pub fn iter(&self) -> std::slice::Iter<Strand<T>> {
         self.strands.iter()
     }
 
-    pub fn profile_matrix(&self) -> Result<Vec<[usize; 4]>, StrandError> {
-        let n = self
-            .strands
-            .first()
-            .ok_or_else(|| StrandError::NoStrands)?
-            .strand
-            .data
-            .len();
-        let mut profile_matrix = vec![[0; 4]; n];
+    fn common_substrand(&self, a: &[T], b: &[T]) -> Vec<T> {
+        // Small optimization, where we build the trie
+        // only for the smaller common substring.
+        let (left, right) = if a.len() > b.len() { (b, a) } else { (a, b) };
 
-        for strand in &self.strands {
-            if strand.strand.data.len() != n {
-                return Err(StrandError::LengthsAreDifferent);
-            }
-
-            for (index, base) in strand.strand.data.iter().enumerate() {
-                profile_matrix[index][base.index()] += 1;
+        // Build a prefix Trie
+        let mut trie = Trie::new();
+        for i in 0..left.len() {
+            trie.add(&left[i..], 0);
+        }
+        // Find the longest match within right
+        let mut longest = vec![];
+        for i in 0..right.len() {
+            let current = trie.find_longest(&right[i..]);
+            if current.len() > longest.len() {
+                longest = current;
             }
         }
-
-        Ok(profile_matrix)
+        longest
     }
 
-    pub fn superstring(&self) -> Option<DNA> {
+    pub fn longest_common_substrand(&self) -> Vec<T> {
+        let mut common = self.strands[0].strand.clone();
+        for strand in &self.strands {
+            common = self.common_substrand(&common, &strand.strand);
+        }
+        common
+    }
+
+    pub fn superstring(&self) -> Option<Vec<T>> {
         let trie = Trie::from(&self.strands);
 
         let mut all_states = vec![];
         for strand in &self.strands {
             let mut states = vec![];
-            for data in &strand.strand.data {
+            for data in &strand.strand {
                 states.push((&trie.root, 0));
                 states = states
                     .into_iter()
@@ -508,26 +691,21 @@ impl Strands {
             all_states.push(states);
         }
 
-        // println!("states[0] {:?}", all_states[0][1]);
-
-        let mut match_: Option<Vec<DNABase>> = None;
+        let mut match_: Option<Vec<T>> = None;
         for (i, strand) in self.strands.iter().enumerate() {
-            let mut current_data = strand.strand.data.clone();
+            let mut current_data = strand.strand.clone();
             let mut index = i;
             let mut visited = HashSet::new();
             visited.insert(i);
             loop {
                 let states = &all_states[index];
                 if let Some((state, match_size)) = states.get(1) {
-                    // println!("state {:?}, {:?}", state.leafs, visited);
                     if let Some(leaf_index) = state
                         .leafs
                         .iter()
-                        .filter(|leaf_index| !visited.contains(leaf_index))
-                        .next()
+                        .find(|leaf_index| !visited.contains(leaf_index))
                     {
-                        // println!("Extending {:?}", leaf_index);
-                        let new_strand = &self.strands[*leaf_index].strand.data;
+                        let new_strand = &self.strands[*leaf_index].strand;
                         current_data.extend(new_strand.iter().skip(*match_size));
                         visited.insert(*leaf_index);
                         index = *leaf_index;
@@ -539,7 +717,6 @@ impl Strands {
                     break;
                 }
             }
-            // println!("Visited {:?}", visited.len());
             if visited.len() == self.strands.len() {
                 if let Some(current_match) = &match_ {
                     if current_match.len() > current_data.len() {
@@ -548,15 +725,33 @@ impl Strands {
                 } else {
                     match_ = Some(current_data);
                 }
-                // println!("Match {:?}", match_);
             }
-            // println!("----");
         }
-        if let Some(match_) = match_ {
-            Some(DNA { data: match_ })
-        } else {
-            None
+        match_
+    }
+}
+
+impl Strands<DNABase> {
+    pub fn profile_matrix(&self) -> Result<Vec<[usize; 4]>, StrandError> {
+        let n = self
+            .strands
+            .first()
+            .ok_or(StrandError::NoStrands)?
+            .strand
+            .len();
+        let mut profile_matrix = vec![[0; 4]; n];
+
+        for strand in &self.strands {
+            if strand.strand.len() != n {
+                return Err(StrandError::LengthsAreDifferent);
+            }
+
+            for (index, base) in strand.strand.iter().enumerate() {
+                profile_matrix[index][base.index()] += 1;
+            }
         }
+
+        Ok(profile_matrix)
     }
 }
 
@@ -565,7 +760,7 @@ pub enum ParseState {
     DATA,
 }
 
-pub fn parse_fasta(string: &[u8]) -> Result<Strands, ParseError> {
+pub fn parse_fasta<T: Base>(string: &[u8]) -> Result<Strands<T>, ParseError> {
     let mut name = vec![];
     let mut data = vec![];
     let mut state = ParseState::NAME;
@@ -574,11 +769,14 @@ pub fn parse_fasta(string: &[u8]) -> Result<Strands, ParseError> {
     for c in string {
         let newstate = match (c, &state) {
             (b'>', _) => {
-                if name.len() != 0 {
+                if !name.is_empty() {
                     let sname = String::from_utf8(name)?;
+                    if let Some(terminal) = T::terminal() {
+                        data.push(terminal);
+                    }
                     strands.push(Strand {
                         name: sname,
-                        strand: DNA { data },
+                        strand: data,
                     });
                     name = vec![];
                     data = vec![];
@@ -590,96 +788,50 @@ pub fn parse_fasta(string: &[u8]) -> Result<Strands, ParseError> {
                 name.push(*c);
                 None
             }
-            (b'A', ParseState::DATA) => {
-                data.push(DNABase::A);
-                None
-            }
-            (b'C', ParseState::DATA) => {
-                data.push(DNABase::C);
-                None
-            }
-            (b'G', ParseState::DATA) => {
-                data.push(DNABase::G);
-                None
-            }
-            (b'T', ParseState::DATA) => {
-                data.push(DNABase::T);
-                None
-            }
             (b'\n', ParseState::DATA) => None,
-            (_, ParseState::DATA) => {
-                return Err(ParseError::UnexpectedData);
+            (c, ParseState::DATA) => {
+                let base: T = (*c).try_into().map_err(|_| ParseError::UnexpectedData)?;
+                data.push(base);
+                None
             }
         };
         if let Some(newstate) = newstate {
             state = newstate;
         }
     }
-    if name.len() != 0 {
+    if let Some(terminal) = T::terminal() {
+        data.push(terminal);
+    }
+    if !name.is_empty() {
         let sname = String::from_utf8(name)?;
         strands.push(Strand {
             name: sname,
-            strand: DNA { data },
+            strand: data,
         });
     }
     Ok(Strands::from(strands))
 }
 
-pub fn parse_dna(string: &[u8]) -> Result<DNA, ParseError> {
-    string
-        .into_iter()
-        .map(|c| match c {
-            b'A' => Ok(DNABase::A),
-            b'C' => Ok(DNABase::C),
-            b'G' => Ok(DNABase::G),
-            b'T' => Ok(DNABase::T),
-            _ => Err(ParseError::UnexpectedData),
+pub fn parse<T: Base>(string: &[u8]) -> Result<Strand<T>, ParseError> {
+    let mut parsed: Result<Vec<_>, _> = string
+        .iter()
+        .map(|c| {
+            let base: Result<T, _> = (*c).try_into().map_err(|_| ParseError::UnexpectedData);
+            base
         })
-        .collect()
-}
-
-pub fn parse_rna(string: &[u8]) -> Result<RNA, ParseError> {
-    string
-        .into_iter()
-        .map(|c| match c {
-            b'A' => Ok(RNABase::A),
-            b'C' => Ok(RNABase::C),
-            b'G' => Ok(RNABase::G),
-            b'U' => Ok(RNABase::U),
-            _ => Err(ParseError::UnexpectedData),
-        })
-        .collect()
-}
-
-pub fn parse_prot(string: &[u8]) -> Result<Vec<Protein>, ParseError> {
-    let mut result = string
-        .into_iter()
-        .map(|c| match c {
-            b'F' => Ok(Protein::F),
-            b'L' => Ok(Protein::L),
-            b'S' => Ok(Protein::S),
-            b'Y' => Ok(Protein::Y),
-            b'C' => Ok(Protein::C),
-            b'W' => Ok(Protein::W),
-            b'P' => Ok(Protein::P),
-            b'H' => Ok(Protein::H),
-            b'Q' => Ok(Protein::Q),
-            b'R' => Ok(Protein::R),
-            b'I' => Ok(Protein::I),
-            b'M' => Ok(Protein::M),
-            b'T' => Ok(Protein::T),
-            b'N' => Ok(Protein::N),
-            b'K' => Ok(Protein::K),
-            b'V' => Ok(Protein::V),
-            b'A' => Ok(Protein::A),
-            b'D' => Ok(Protein::D),
-            b'E' => Ok(Protein::E),
-            b'G' => Ok(Protein::G),
-            _ => Err(ParseError::UnexpectedData),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    result.push(Protein::Stop);
-    Ok(result)
+        .collect();
+    if let Some(terminal) = T::terminal() {
+        if let Ok(ref mut parsed) = parsed {
+            parsed.push(terminal);
+        }
+    }
+    match parsed {
+        Ok(parsed) => Ok(Strand {
+            name: "".to_string(),
+            strand: parsed,
+        }),
+        Err(err) => Err(err),
+    }
 }
 
 #[cfg(test)]
@@ -688,19 +840,21 @@ mod tests {
 
     #[test]
     fn test_find_loci() {
-        let data = parse_dna(b"ATGCTTCAGAAAGGTCTTACG").unwrap();
-        let pattern = parse_dna(b"T").unwrap();
+        let data = parse::<DNABase>(b"ATGCTTCAGAAAGGTCTTACG").unwrap();
+        let pattern = parse::<DNABase>(b"T").unwrap();
 
         assert_eq!(
-            pattern.find(&data).collect::<Vec<_>>(),
+            pattern.find(&data.strand).collect::<Vec<_>>(),
             vec![1, 4, 5, 14, 16, 17]
         );
     }
 
     #[test]
     fn test_prot() {
-        let data = parse_rna(b"AUGGCCAUGGCGCCCAGAACUGAGAUCAAUAGUACCCGUAUUAACGGGUGA").unwrap();
-        let expected = parse_prot(b"MAMAPRTEINSTRING").unwrap();
-        assert_eq!(data.proteins().unwrap(), expected);
+        let data =
+            parse::<RNABase>(b"AUGGCCAUGGCGCCCAGAACUGAGAUCAAUAGUACCCGUAUUAACGGGUGA").unwrap();
+
+        let expected = parse::<AA>(b"MAMAPRTEINSTRING").unwrap().strand;
+        assert_eq!(data.protein().unwrap(), expected);
     }
 }
