@@ -215,7 +215,7 @@ impl Base for AA {
 }
 
 impl AA {
-    pub fn weight(&self) -> f32 {
+    pub fn weight(&self) -> f64 {
         match self {
             AA::A => 71.03711,
             AA::C => 103.00919,
@@ -547,7 +547,7 @@ impl Strand<DNABase> {
         }
     }
 
-    pub fn find_palindromes(&self, n: usize, m: usize) -> Vec<(usize, usize)> {
+    pub fn find_palindromes(&self, _n: usize, _m: usize) -> Vec<(usize, usize)> {
         vec![]
     }
 }

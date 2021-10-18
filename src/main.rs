@@ -114,16 +114,16 @@ pub fn fib() {
     string = string.trim().to_string();
     let tokens = string.split(' ').collect::<Vec<_>>();
 
-    let n: usize = tokens[0].parse().unwrap();
-    let k: usize = tokens[1].parse().unwrap();
+    let generations: usize = tokens[0].parse().unwrap();
+    let child_per_generation: usize = tokens[1].parse().unwrap();
 
     let mut a = 1;
     let mut b = 1;
 
-    for _ in 0..n - 2 {
-        let c = k * a + b;
+    for _ in 0..generations - 2 {
+        let tmp = child_per_generation * a + b;
         a = b;
-        b = c;
+        b = tmp;
     }
     println!("{:?}", b);
 }
@@ -225,16 +225,16 @@ pub fn iev() {
     let string = std::fs::read(filename).unwrap();
     let mut string = String::from_utf8(string).unwrap();
     string = string.trim().to_string();
-    let tokens = string.split(' ').collect::<Vec<_>>();
+    let numbers: Vec<f32> = string
+        .split(' ')
+        .map(|c| c.parse().unwrap())
+        .collect::<Vec<_>>();
 
-    let a: f32 = tokens[0].parse().unwrap();
-    let b: f32 = tokens[1].parse().unwrap();
-    let c: f32 = tokens[2].parse().unwrap();
-    let d: f32 = tokens[3].parse().unwrap();
-    let e: f32 = tokens[4].parse().unwrap();
-    let _f: f32 = tokens[5].parse().unwrap();
-
-    let out = 2.0 * a + 2.0 * b + 2.0 * c + 2.0 * 0.75 * d + e;
+    let out = 2.0 * numbers[0]
+        + 2.0 * numbers[1]
+        + 2.0 * numbers[2]
+        + 2.0 * 0.75 * numbers[3]
+        + numbers[4];
     println!("{:?}", out);
 }
 
@@ -288,12 +288,8 @@ pub fn lia() {
 
     let mut final_prob = 0.0;
     for i in n..=n_individuals {
-        let c = c(n_individuals, i);
-        let q = p.pow(i as f64);
-
-        let r = (1.0 - p).pow((n_individuals - i) as f64);
-
-        final_prob += c * q * r;
+        final_prob +=
+            c(n_individuals, i) * p.pow(i as f64) * (1.0 - p).pow((n_individuals - i) as f64);
     }
     println!("{:?}", final_prob);
 }
@@ -367,8 +363,8 @@ pub fn prtm() {
     let tokens = string.split(|c| c == &b'\n').collect::<Vec<_>>();
     let prot = parse::<AA>(tokens[0]).unwrap();
 
-    let water = 18.01056;
-    let weight: f32 = prot.strand.iter().map(|aa| aa.weight()).sum::<f32>();
+    // let _water = 18.01056;
+    let weight: f64 = prot.strand.iter().map(|aa| aa.weight()).sum::<f64>();
     println!("{:.10}", weight);
 }
 
@@ -381,7 +377,7 @@ pub fn orf() {
     }
 }
 
-fn perm() {
+pub fn perm() {
     let filename = "data/perm.txt";
     let string = std::fs::read(filename).unwrap();
     let string = String::from_utf8(string).unwrap();
