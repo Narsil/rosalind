@@ -1,3 +1,5 @@
+use itertools::Itertools;
+use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -547,14 +549,37 @@ impl Strand<DNABase> {
         }
     }
 
-    pub fn find_palindromes(&self, _n: usize, _m: usize) -> Vec<(usize, usize)> {
-        vec![]
+    pub fn find_palindromes(&self, n: usize, m: usize) -> Vec<(usize, usize)> {
+        let mut positions = vec![];
+        let mut trie = Trie::new();
+        let bases = DNABase::bases();
+        for i in (n..=m).step_by(2) {
+            let half = i / 2;
+            for first in (0..half).map(|_| bases.iter()).multi_cartesian_product() {
+                let complement = first
+                    .iter()
+                    .map(|base| base.complement())
+                    .rev()
+                    .collect::<Vec<_>>();
+
+                let mut full = Vec::with_capacity(m);
+                full.extend(first);
+                full.extend(complement);
+                trie.add(&full, i);
+            }
+        }
+        for (pos, i) in trie.matches(&self.strand) {
+            positions.push((pos, i));
+        }
+        // positions.sort();
+        positions
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Node<T: Base> {
     subnodes: HashMap<T, Node<T>>,
+    ids: HashSet<usize>,
     leafs: HashSet<usize>,
 }
 
@@ -562,6 +587,7 @@ impl<T: Base> Node<T> {
     fn new() -> Self {
         Self {
             subnodes: HashMap::new(),
+            ids: HashSet::new(),
             leafs: HashSet::new(),
         }
     }
@@ -579,13 +605,14 @@ impl<T: Base> Trie<T> {
 
     fn add(&mut self, data: &[T], id: usize) {
         let mut node = &mut self.root;
-        node.leafs.insert(id);
+        node.ids.insert(id);
 
         for base in data {
             let subnode = node.subnodes.entry(*base).or_insert_with(Node::new);
-            subnode.leafs.insert(id);
             node = subnode;
+            node.ids.insert(id);
         }
+        node.leafs.insert(id);
     }
 
     fn from(strands: &[Strand<T>]) -> Trie<T> {
@@ -594,6 +621,31 @@ impl<T: Base> Trie<T> {
             trie.add(&strand.strand, i);
         }
         trie
+    }
+
+    fn matches(&self, long_string: &[T]) -> Vec<(usize, usize)> {
+        let mut matches = vec![];
+        let mut nodes: Vec<(usize, &Node<T>)> = vec![];
+        for (position, c) in long_string.iter().enumerate() {
+            nodes.push((position, &self.root));
+            nodes = nodes
+                .iter()
+                .filter_map(|(p, n)| {
+                    if let Some(subnode) = n.subnodes.get(c) {
+                        Some((*p, subnode))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for (p, n) in &nodes {
+                for leaf in &n.leafs {
+                    matches.push((*p, *leaf));
+                }
+            }
+        }
+        matches
     }
 
     fn find_longest(&self, pattern: &[T]) -> Vec<T> {
@@ -701,7 +753,7 @@ impl<T: Base> Strands<T> {
                 let states = &all_states[index];
                 if let Some((state, match_size)) = states.get(1) {
                     if let Some(leaf_index) = state
-                        .leafs
+                        .ids
                         .iter()
                         .find(|leaf_index| !visited.contains(leaf_index))
                     {
@@ -752,6 +804,65 @@ impl Strands<DNABase> {
         }
 
         Ok(profile_matrix)
+    }
+
+    pub fn splice(&self) -> Vec<Vec<AA>> {
+        let reference = &self.strands[0];
+        let mut trie = Trie::new();
+        for strand in &self.strands[1..] {
+            trie.add(&strand.strand, strand.strand.len())
+        }
+
+        let mut skip = 0;
+        let mut matches: VecDeque<_> = trie.matches(&reference.strand).into_iter().collect();
+
+        let mut all = vec![];
+        while let Some((mut pos, mut len)) = matches.pop_front() {
+            let mut transcribed = vec![];
+            let mut leftovers = vec![];
+            for (i, c) in reference.strand.iter().enumerate() {
+                if skip > 0 {
+                    skip -= 1;
+                    if skip > 0 {
+                        continue;
+                    }
+                }
+                if i < pos {
+                    transcribed.push(*c);
+                } else if i == pos {
+                    skip = len;
+                    loop {
+                        if let Some((p, l)) = matches.pop_front() {
+                            if p < i + skip {
+                                leftovers.push((p, l));
+                            } else {
+                                pos = p;
+                                len = l;
+                                break;
+                            }
+                        } else {
+                            pos = usize::MAX;
+                            len = 0;
+                            break;
+                        }
+                    }
+                } else {
+                    unreachable!();
+                }
+            }
+            for (p, l) in leftovers {
+                matches.push_back((p, l));
+            }
+
+            let strand = Strand {
+                name: "".to_string(),
+                strand: transcribed,
+            };
+            if let Ok(protein) = strand.rna().protein() {
+                all.push(protein);
+            }
+        }
+        all
     }
 }
 
@@ -837,6 +948,7 @@ pub fn parse<T: Base>(string: &[u8]) -> Result<Strand<T>, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use maplit::{hashmap, hashset};
 
     #[test]
     fn test_find_loci() {
@@ -856,5 +968,44 @@ mod tests {
 
         let expected = parse::<AA>(b"MAMAPRTEINSTRING").unwrap().strand;
         assert_eq!(data.protein().unwrap(), expected);
+    }
+
+    #[test]
+    fn test_trie_add() {
+        let mut trie = Trie::new();
+        trie.add(&vec![DNABase::A], 0);
+        assert_eq!(
+            trie,
+            Trie {
+                root: Node {
+                    subnodes: hashmap! {
+                        DNABase::A => Node{
+                            subnodes: hashmap!{},
+                            ids: hashset!{0},
+                            leafs: hashset!{0},
+                        }
+                    },
+                    ids: hashset! {0},
+                    leafs: hashset! {},
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_matches() {
+        let data = parse::<DNABase>(b"ATGCTTCAGAAAGGTCTTACG").unwrap();
+        let pattern = parse::<DNABase>(b"TT").unwrap();
+        let pattern2 = parse::<DNABase>(b"ATG").unwrap();
+        let pattern3 = parse::<DNABase>(b"TGC").unwrap();
+        let mut trie = Trie::new();
+        trie.add(&pattern.strand, 10);
+        trie.add(&pattern2.strand, 11);
+        trie.add(&pattern3.strand, 12);
+
+        assert_eq!(
+            trie.matches(&data.strand),
+            vec![(0, 11), (1, 12), (4, 10), (16, 10)]
+        );
     }
 }

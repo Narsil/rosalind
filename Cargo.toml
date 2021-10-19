@@ -10,3 +10,6 @@ thiserror = "1.0"
 num-traits = "0.2"
 ureq = "2.2"
 itertools = "0.10"
+
+[dev-dependencies]
+maplit = "1.0"

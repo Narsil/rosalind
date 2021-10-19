@@ -395,14 +395,25 @@ pub fn perm() {
     }
 }
 
-fn revp() {
+pub fn revp() {
     let filename = "data/revp.txt";
     let string = std::fs::read(filename).unwrap();
     let strands = parse_fasta::<DNABase>(&string).unwrap();
 
-    for (start, length) in strands.strands[0].find_palindromes(4, 13) {
-        println!("{:?} {:?}", start, length);
+    for (start, length) in strands.strands[0].find_palindromes(4, 12) {
+        println!("{:?} {:?}", start + 1, length);
     }
+}
+pub fn splc() {
+    let filename = "data/splc.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta::<DNABase>(&string).unwrap();
+
+    let proteins = strands.splice();
+    for aa in &proteins[0][..proteins[0].len() - 1] {
+        print!("{:?}", aa);
+    }
+    println!();
 }
 fn main() {
     //dna();
@@ -424,10 +435,10 @@ fn main() {
     //mprt();
     //orf();
     //perm();
-
-    prtm();
+    //prtm();
+    //revp();
     let start = Instant::now();
-    revp();
+    splc();
     println!("Elapsed {:?}", start.elapsed());
 }
 
