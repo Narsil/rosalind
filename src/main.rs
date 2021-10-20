@@ -438,14 +438,14 @@ pub fn lexf() {
 fn increasing_subsequence<const INCREASING: bool>(sequence: &[usize]) -> Vec<usize> {
     let n = sequence.len();
     let mut predecessors = vec![0; n];
-    let mut partial = vec![0; n + 1];
-    let mut l = 0;
+    let mut partial = vec![0; n];
+    let mut longest_n = 0;
 
     for i in 0..n {
         // Binary search for the largest positive j ≤ L
         // such that X[M[j]] < X[i]
         let mut lo = 1;
-        let mut hi = l + 1;
+        let mut hi = longest_n + 1;
         let mut mid;
         while lo < hi {
             mid = lo + (hi - lo) / 2;
@@ -465,25 +465,25 @@ fn increasing_subsequence<const INCREASING: bool>(sequence: &[usize]) -> Vec<usi
 
         // After searching, lo is 1 greater than the
         // length of the longest prefix of X[i]
-        let new_l = lo;
+        let new_longest = lo;
 
         // The predecessor of X[i] is the last index of
         // the subsequence of length newL-1
-        predecessors[i] = partial[new_l - 1];
-        partial[new_l] = i;
+        predecessors[i] = partial[new_longest - 1];
+        partial[new_longest] = i;
 
-        if new_l > l {
+        if new_longest > longest_n {
             // If we found a subsequence longer than any we've
             // found yet, update L
-            l = new_l;
+            longest_n = new_longest;
         }
     }
 
     // Reconstruct the longest increasing subsequence
-    let mut result = vec![0; l];
-    let mut k = partial[l];
-    for i in 0..l {
-        let index = l - i - 1;
+    let mut result = vec![0; longest_n];
+    let mut k = partial[longest_n];
+    for i in 0..longest_n {
+        let index = longest_n - i - 1;
         result[index] = sequence[k];
         k = predecessors[k];
     }
