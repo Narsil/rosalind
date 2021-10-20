@@ -1,5 +1,7 @@
 use itertools::Itertools;
+use num_bigint::BigUint;
 use num_traits::pow::Pow;
+use num_traits::One;
 use rosalind::individuals::{coupling, Dd, Individual, DD};
 use rosalind::{parse, parse_fasta, DNABase, RNABase, AA};
 use std::collections::HashMap;
@@ -265,6 +267,12 @@ pub fn factorial(num: usize) -> f64 {
         num => (1..=num).map(|i| i as f64).product(),
     }
 }
+pub fn factorial_b(num: usize) -> BigUint {
+    match num {
+        0 => One::one(),
+        num => (1..=num).map(BigUint::from).product(),
+    }
+}
 
 pub fn lia() {
     let filename = "data/lia.txt";
@@ -517,6 +525,55 @@ pub fn lgis() {
     println!();
 }
 
+pub fn pmch() {
+    let filename = "data/pmch.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta::<RNABase>(&string).unwrap();
+
+    let mut n_a = 0;
+    let mut n_u = 0;
+    let mut n_c = 0;
+    let mut n_g = 0;
+    for base in &strands.strands[0].strand {
+        match base {
+            RNABase::A => n_a += 1,
+            RNABase::U => n_u += 1,
+            RNABase::C => n_c += 1,
+            RNABase::G => n_g += 1,
+        }
+    }
+    assert_eq!(n_a, n_u);
+    assert_eq!(n_c, n_g);
+
+    println!("{:?}", factorial_b(n_a) * factorial_b(n_c));
+}
+
+fn permutations(n: usize, k: usize) -> BigUint {
+    assert!(k < n);
+    (n - k..n).map(BigUint::from).product()
+}
+pub fn pper() {
+    let filename = "data/pper.txt";
+    let string = std::fs::read(filename).unwrap();
+    let lines = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let tokens = lines[0].split(|c| c == &b' ').collect::<Vec<_>>();
+    let n: usize = String::from_utf8(tokens[0].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+    let k: usize = String::from_utf8(tokens[1].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut p = 1;
+    println!("{:?} {:?}", n, k);
+    for i in n - k + 1..=n {
+        p *= i;
+        p %= 1_000_000;
+    }
+    println!("{:?}", p);
+}
+
 fn main() {
     //dna();
     //dna_to_rna();
@@ -541,8 +598,10 @@ fn main() {
     //revp();
     //splc();
     //lexf();
+    //lgis();
+    //pmch();
+    //pper();
     let start = Instant::now();
-    lgis();
     println!("Elapsed {:?}", start.elapsed());
 }
 
