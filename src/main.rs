@@ -415,6 +415,108 @@ pub fn splc() {
     }
     println!();
 }
+pub fn lexf() {
+    let filename = "data/lexf.txt";
+    let string = std::fs::read(filename).unwrap();
+    let tokens = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let letters = tokens[0]
+        .split(|c| c == &b' ')
+        .map(|le| le[0])
+        .collect::<Vec<_>>();
+    let n: usize = String::from_utf8(tokens[1].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+    for permutation in (0..n)
+        .map(|_| letters.iter().cloned())
+        .multi_cartesian_product()
+    {
+        println!("{}", String::from_utf8(permutation).unwrap());
+    }
+}
+
+fn increasing_subsequence<const INCREASING: bool>(sequence: &[usize]) -> Vec<usize> {
+    let n = sequence.len();
+    let mut predecessors = vec![0; n];
+    let mut partial = vec![0; n + 1];
+    let mut l = 0;
+
+    for i in 0..n {
+        // Binary search for the largest positive j ≤ L
+        // such that X[M[j]] < X[i]
+        let mut lo = 1;
+        let mut hi = l + 1;
+        let mut mid;
+        while lo < hi {
+            mid = lo + (hi - lo) / 2;
+
+            match (INCREASING, sequence[partial[mid]].cmp(&sequence[i])) {
+                (true, std::cmp::Ordering::Less) => {
+                    lo = mid + 1;
+                }
+                (false, std::cmp::Ordering::Greater) => {
+                    lo = mid + 1;
+                }
+                _ => {
+                    hi = mid;
+                }
+            }
+        }
+
+        // After searching, lo is 1 greater than the
+        // length of the longest prefix of X[i]
+        let new_l = lo;
+
+        // The predecessor of X[i] is the last index of
+        // the subsequence of length newL-1
+        predecessors[i] = partial[new_l - 1];
+        partial[new_l] = i;
+
+        if new_l > l {
+            // If we found a subsequence longer than any we've
+            // found yet, update L
+            l = new_l;
+        }
+    }
+
+    // Reconstruct the longest increasing subsequence
+    let mut result = vec![0; l];
+    let mut k = partial[l];
+    for i in 0..l {
+        let index = l - i - 1;
+        result[index] = sequence[k];
+        k = predecessors[k];
+    }
+
+    result
+}
+
+pub fn lgis() {
+    let filename = "data/lgis.txt";
+    let string = std::fs::read(filename).unwrap();
+    let lines = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let _n: usize = String::from_utf8(lines[0].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+    let sequence: Vec<usize> = lines[1]
+        .split(|c| c == &b' ')
+        .map(|c| String::from_utf8(c.to_vec()).unwrap().parse().unwrap())
+        .collect::<Vec<_>>();
+
+    let increasing = increasing_subsequence::<true>(&sequence);
+    let decreasing = increasing_subsequence::<false>(&sequence);
+
+    for i in increasing {
+        print!("{:?} ", i);
+    }
+    println!();
+    for i in decreasing {
+        print!("{:?} ", i);
+    }
+    println!();
+}
+
 fn main() {
     //dna();
     //dna_to_rna();
@@ -437,8 +539,10 @@ fn main() {
     //perm();
     //prtm();
     //revp();
+    //splc();
+    //lexf();
     let start = Instant::now();
-    splc();
+    lgis();
     println!("Elapsed {:?}", start.elapsed());
 }
 
