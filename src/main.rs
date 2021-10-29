@@ -548,10 +548,6 @@ pub fn pmch() {
     println!("{:?}", factorial_b(n_a) * factorial_b(n_c));
 }
 
-fn permutations(n: usize, k: usize) -> BigUint {
-    assert!(k < n);
-    (n - k..n).map(BigUint::from).product()
-}
 pub fn pper() {
     let filename = "data/pper.txt";
     let string = std::fs::read(filename).unwrap();
@@ -572,6 +568,84 @@ pub fn pper() {
         p %= 1_000_000;
     }
     println!("{:?}", p);
+}
+
+pub fn prob() {
+    let filename = "data/prob.txt";
+    let string = std::fs::read(filename).unwrap();
+    let lines = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let dna = parse::<DNABase>(&lines[0]).unwrap();
+    let probabilities: Vec<f32> = lines[1]
+        .split(|c| c == &b' ')
+        .map(|c| String::from_utf8(c.to_vec()).unwrap().parse().unwrap())
+        .collect();
+
+    for p in probabilities {
+        let log_p = (p / 2.0).ln() / (10.0f32.ln());
+        let log_1_p = ((1.0 - p) / 2.0).ln() / (10.0f32.ln());
+
+        let fp: f32 = dna
+            .strand
+            .iter()
+            .map(|base| match base {
+                DNABase::C | DNABase::G => log_p,
+                _ => log_1_p,
+            })
+            .sum();
+        print!("{:?} ", fp);
+    }
+    println!();
+}
+
+pub fn sign() {
+    let filename = "data/sign.txt";
+    let string = std::fs::read(filename).unwrap();
+    let lines = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let n: usize = String::from_utf8(lines[0].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+    println!("{:?}", BigUint::from(2u32).pow(n) * factorial_b(n));
+    let mut total = 0;
+    for p in (0..n).permutations(n) {
+        for s in 0..2.pow(n) {
+            for (i, pp) in p.iter().enumerate() {
+                let e = s & (1 << i);
+                if e == 0 {
+                    print!("-{:?} ", (pp + 1));
+                } else {
+                    print!("{:?} ", (pp + 1));
+                }
+            }
+            println!();
+            total += 1;
+        }
+    }
+    println!("{:?}", total);
+}
+
+fn sseq() {
+    let filename = "data/sseq.txt";
+    let string = std::fs::read(filename).unwrap();
+    let mut strands = parse_fasta::<DNABase>(&string).unwrap();
+
+    let pattern = strands.strands.pop().unwrap();
+
+    let mut j = 0;
+    let mut expected = pattern.strand[j];
+
+    for (i, &base) in strands.strands[0].strand.iter().enumerate() {
+        if base == expected {
+            print!("{:?} ", i + 1);
+            j += 1;
+            if j < pattern.strand.len() {
+                expected = pattern.strand[j];
+            } else {
+                break;
+            }
+        }
+    }
+    println!();
 }
 
 fn main() {
@@ -601,7 +675,10 @@ fn main() {
     //lgis();
     //pmch();
     //pper();
+    //prob();
+    //sign();
     let start = Instant::now();
+    sseq();
     println!("Elapsed {:?}", start.elapsed());
 }
 
