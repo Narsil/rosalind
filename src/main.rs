@@ -624,7 +624,7 @@ pub fn sign() {
     println!("{:?}", total);
 }
 
-fn sseq() {
+pub fn sseq() {
     let filename = "data/sseq.txt";
     let string = std::fs::read(filename).unwrap();
     let mut strands = parse_fasta::<DNABase>(&string).unwrap();
@@ -646,6 +646,83 @@ fn sseq() {
         }
     }
     println!();
+}
+
+pub fn tree() {
+    let filename = "data/tree.txt";
+    let string = std::fs::read(filename).unwrap();
+    let lines = string.split(|c| c == &b'\n').collect::<Vec<_>>();
+    let n: usize = String::from_utf8(lines[0].to_vec())
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    let edges: Vec<(usize, usize)> = lines[1..lines.len() - 1]
+        .iter()
+        .map(|line| {
+            let tokens: Vec<usize> = line
+                .split(|c| c == &b' ')
+                .take(2)
+                .map(|c| String::from_utf8(c.to_vec()).unwrap().parse().unwrap())
+                .collect::<Vec<_>>();
+            (tokens[0], tokens[1])
+        })
+        .collect::<Vec<_>>();
+
+    let mut disjoint_set: Vec<_> = (0..n).collect();
+
+    for (a, b) in &edges {
+        let db = disjoint_set[*b - 1];
+        let da = disjoint_set[*a - 1];
+        if da < db {
+            disjoint_set[db] = da;
+        } else {
+            disjoint_set[da] = db;
+        }
+    }
+
+    let s: usize = disjoint_set
+        .iter()
+        .enumerate()
+        .map(|(i, p)| if i == *p { 1 } else { 0 })
+        .sum();
+    println!("{:?}", s - 1);
+}
+
+pub fn tran() {
+    let filename = "data/tran.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta::<DNABase>(&string).unwrap();
+
+    let mut transitions = 0.0f64;
+    let mut transversions = 0.0f64;
+    for (a, b) in strands.strands[0]
+        .strand
+        .iter()
+        .zip(strands.strands[1].strand.iter())
+    {
+        if a == b {
+        } else if a.type_() == b.type_() {
+            transitions += 1.0;
+        } else {
+            transversions += 1.0;
+        }
+    }
+    println!("{:?}", transitions / transversions);
+}
+
+pub fn corr() {
+    let filename = "data/corr.txt";
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta::<DNABase>(&string).unwrap();
+
+    for (original, corrected, is_complement) in strands.error_correction() {
+        if is_complement {
+            println!("{}->{}", original, corrected.complement());
+        } else {
+            println!("{}->{}", original, corrected);
+        }
+    }
 }
 
 fn main() {
@@ -677,8 +754,11 @@ fn main() {
     //pper();
     //prob();
     //sign();
+    //sseq();
+    //tree();
+    //tran();
     let start = Instant::now();
-    sseq();
+    corr();
     println!("Elapsed {:?}", start.elapsed());
 }
 

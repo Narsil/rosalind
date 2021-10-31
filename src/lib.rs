@@ -76,6 +76,15 @@ impl DNABase {
             DNABase::G => RNABase::G,
         }
     }
+
+    /// 0 -> purine
+    /// 1 -> pyrimidine
+    pub fn type_(&self) -> usize {
+        match self {
+            DNABase::A | DNABase::G => 0,
+            DNABase::C | DNABase::T => 1,
+        }
+    }
 }
 
 pub struct StrandIterator<'a, 'b, T: Base> {
@@ -83,6 +92,13 @@ pub struct StrandIterator<'a, 'b, T: Base> {
     data_strand: &'b [T],
     matches: Vec<(usize, usize)>,
     index: usize,
+}
+
+fn hamming_distance<T: Base>(left: &[T], right: &[T]) -> usize {
+    left.iter()
+        .zip(right.iter())
+        .map(|(l, r)| if l == r { 0 } else { 1 })
+        .sum()
 }
 
 impl<'a, 'b, T: Base> Iterator for StrandIterator<'a, 'b, T> {
@@ -432,7 +448,7 @@ impl Strand<RNABase> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct Strand<T> {
     pub name: String,
     pub strand: Vec<T>,
@@ -811,6 +827,87 @@ impl<T: Base> Strands<T> {
 }
 
 impl Strands<DNABase> {
+    pub fn error_correction(&self) -> Vec<(&Strand<DNABase>, &Strand<DNABase>, bool)> {
+        let mut counter: HashMap<&Vec<DNABase>, HashSet<usize>> = HashMap::new();
+        let complements: Vec<_> = self.strands.iter().map(|s| s.complement()).collect();
+        let mut gcs_contents = vec![];
+        for (i, (strand, complement)) in self.strands.iter().zip(&complements).enumerate() {
+            counter
+                .entry(&complement.strand)
+                .or_insert(HashSet::new())
+                .insert(i);
+            counter
+                .entry(&strand.strand)
+                .or_insert(HashSet::new())
+                .insert(i);
+            gcs_contents.push((strand.gc(), i));
+        }
+
+        gcs_contents.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut originals = vec![0; gcs_contents.len()];
+        for (i, (_, id)) in gcs_contents.iter().enumerate() {
+            originals[*id] = i;
+        }
+
+        let mut visited = HashSet::new();
+        let mut corrections = vec![];
+        for (_, set) in counter.iter() {
+            if set.len() == 1 {
+                let id = *set.iter().next().unwrap();
+                if visited.contains(&id) {
+                    continue;
+                }
+                let strand = &self.strands[id].strand;
+                let mut i = 1;
+                let gc_index = originals[id];
+                loop {
+                    if gc_index < i && gc_index + i >= gcs_contents.len() {
+                        panic!("No error correction found");
+                    }
+                    if gc_index >= i {
+                        let index = gc_index - i;
+                        let next_id = gcs_contents[index].1;
+                        let lstrand = &self.strands[next_id];
+                        if counter.get(&lstrand.strand).unwrap().len() > 1 {
+                            let distance = hamming_distance(strand, &lstrand.strand);
+                            if distance == 1 {
+                                corrections.push((&self.strands[id], lstrand, false));
+                                break;
+                            }
+                            let cstrand = self.strands[next_id].complement();
+                            let distance = hamming_distance(strand, &cstrand.strand);
+                            if distance == 1 {
+                                corrections.push((&self.strands[id], lstrand, true));
+                                break;
+                            }
+                        }
+                    }
+                    if gc_index + i < gcs_contents.len() {
+                        let index = gc_index + i;
+                        let next_id = gcs_contents[index].1;
+
+                        let lstrand = &self.strands[next_id];
+                        if counter.get(&lstrand.strand).unwrap().len() > 1 {
+                            let distance = hamming_distance(strand, &lstrand.strand);
+                            if distance == 1 {
+                                corrections.push((&self.strands[id], lstrand, false));
+                                break;
+                            }
+                            let cstrand = self.strands[next_id].complement();
+                            let distance = hamming_distance(strand, &cstrand.strand);
+                            if distance == 1 {
+                                corrections.push((&self.strands[id], lstrand, true));
+                                break;
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+                visited.insert(id);
+            }
+        }
+        corrections
+    }
     pub fn profile_matrix(&self) -> Result<Vec<[usize; 4]>, StrandError> {
         let n = self
             .strands
