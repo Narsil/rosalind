@@ -2,6 +2,7 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::pow::Pow;
 use num_traits::One;
+use rosalind::compact::{parse_fasta_compact, DNACompact};
 use rosalind::individuals::{coupling, Dd, Individual, DD};
 use rosalind::{parse, parse_fasta, DNABase, RNABase, AA};
 use std::collections::HashMap;
@@ -725,6 +726,15 @@ pub fn corr() {
     }
 }
 
+pub fn tmp_test() {
+    let filename = "GRCh38_latest_genomic.fna";
+
+    let string = std::fs::read(filename).unwrap();
+    let strands = parse_fasta_compact::<DNACompact>(&string).unwrap();
+
+    println!("Found {:?} strands", strands.strands.len());
+}
+
 fn main() {
     //dna();
     //dna_to_rna();
@@ -758,7 +768,8 @@ fn main() {
     //tree();
     //tran();
     let start = Instant::now();
-    corr();
+    // corr();
+    tmp_test();
     println!("Elapsed {:?}", start.elapsed());
 }
 

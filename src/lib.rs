@@ -3,11 +3,10 @@ use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
+pub mod compact;
 pub mod individuals;
 
-pub trait Base:
-    std::hash::Hash + Eq + Clone + Copy + std::convert::TryFrom<u8> + std::fmt::Debug
-{
+pub trait Base: std::hash::Hash + Eq + Clone + Copy + std::fmt::Debug {
     fn terminal() -> Option<Self> {
         None
     }
@@ -20,7 +19,7 @@ pub enum ParseError {
     #[error("utf-8 error")]
     Utf8Error(#[from] std::string::FromUtf8Error),
     #[error("UnexpectedData in FAST")]
-    UnexpectedData,
+    UnexpectedData(u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,7 +38,11 @@ impl std::convert::TryFrom<u8> for DNABase {
             b'C' => Ok(DNABase::C),
             b'G' => Ok(DNABase::G),
             b'T' => Ok(DNABase::T),
-            _ => Err(ParseError::UnexpectedData),
+            b'a' => Ok(DNABase::A),
+            b'c' => Ok(DNABase::C),
+            b'g' => Ok(DNABase::G),
+            b't' => Ok(DNABase::T),
+            c => Err(ParseError::UnexpectedData(c)),
         }
     }
 }
@@ -159,7 +162,7 @@ impl std::convert::TryFrom<u8> for RNABase {
             b'C' => Ok(RNABase::C),
             b'G' => Ok(RNABase::G),
             b'U' => Ok(RNABase::U),
-            _ => Err(ParseError::UnexpectedData),
+            c => Err(ParseError::UnexpectedData(c)),
         }
     }
 }
@@ -222,7 +225,7 @@ impl std::convert::TryFrom<u8> for AA {
             b'D' => Ok(AA::D),
             b'E' => Ok(AA::E),
             b'G' => Ok(AA::G),
-            _ => Err(ParseError::UnexpectedData),
+            c => Err(ParseError::UnexpectedData(c)),
         }
     }
 }
@@ -468,9 +471,13 @@ impl<T: Base> Strand<T> {
 impl<T: Base> std::fmt::Display for Strand<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let n = self.strand.len();
-        let last = if T::terminal().is_some() { n - 1 } else { n };
-        for base in &self.strand[..last] {
+        let len = if T::terminal().is_some() { n - 1 } else { n };
+        write!(f, ">{}\n", self.name)?;
+        for (i, base) in self.strand.iter().take(len).enumerate() {
             write!(f, "{:?}", base)?;
+            if i % 70 == 69 {
+                write!(f, "\n")?;
+            }
         }
         Ok(())
     }
@@ -707,6 +714,15 @@ impl<T: Base> STrie<T> {
 #[derive(Debug)]
 pub struct Strands<T> {
     pub strands: Vec<Strand<T>>,
+}
+
+impl<T: Base> std::fmt::Display for Strands<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for strand in &self.strands {
+            write!(f, "{}\n", strand)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -994,12 +1010,15 @@ impl Strands<DNABase> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum ParseState {
     NAME,
     DATA,
 }
 
-pub fn parse_fasta<T: Base>(string: &[u8]) -> Result<Strands<T>, ParseError> {
+pub fn parse_fasta<T: Base + std::convert::TryFrom<u8>>(
+    string: &[u8],
+) -> Result<Strands<T>, ParseError> {
     let mut name = vec![];
     let mut data = vec![];
     let mut state = ParseState::NAME;
@@ -1013,10 +1032,13 @@ pub fn parse_fasta<T: Base>(string: &[u8]) -> Result<Strands<T>, ParseError> {
                     if let Some(terminal) = T::terminal() {
                         data.push(terminal);
                     }
-                    strands.push(Strand {
+                    data.shrink_to_fit();
+                    // println!("Strand {:?} {:?}", data.len(), data.capacity());
+                    let strand = Strand {
                         name: sname,
                         strand: data,
-                    });
+                    };
+                    strands.push(strand);
                     name = vec![];
                     data = vec![];
                 }
@@ -1028,8 +1050,21 @@ pub fn parse_fasta<T: Base>(string: &[u8]) -> Result<Strands<T>, ParseError> {
                 None
             }
             (b'\n', ParseState::DATA) => None,
+            (b'N', ParseState::DATA) => {
+                // Skip
+                None
+            }
+            (
+                b'M' | b'R' | b'Y' | b'W' | b'D' | b'H' | b'B' | b'V' | b'S' | b'K',
+                ParseState::DATA,
+            ) => {
+                // Skip
+                None
+            }
             (c, ParseState::DATA) => {
-                let base: T = (*c).try_into().map_err(|_| ParseError::UnexpectedData)?;
+                let base: T = (*c)
+                    .try_into()
+                    .map_err(|_| ParseError::UnexpectedData(*c))?;
                 data.push(base);
                 None
             }
@@ -1051,11 +1086,11 @@ pub fn parse_fasta<T: Base>(string: &[u8]) -> Result<Strands<T>, ParseError> {
     Ok(Strands::from(strands))
 }
 
-pub fn parse<T: Base>(string: &[u8]) -> Result<Strand<T>, ParseError> {
+pub fn parse<T: Base + std::convert::TryFrom<u8>>(string: &[u8]) -> Result<Strand<T>, ParseError> {
     let mut parsed: Result<Vec<_>, _> = string
         .iter()
         .map(|c| {
-            let base: Result<T, _> = (*c).try_into().map_err(|_| ParseError::UnexpectedData);
+            let base: Result<T, _> = (*c).try_into().map_err(|_| ParseError::UnexpectedData(*c));
             base
         })
         .collect();
